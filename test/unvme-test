@@ -25,8 +25,7 @@ excmd() {
     [ $? -ne 0 ] && exit 1
 }
 
-[ ${EUID} -ne 0 ] && echo "${PROG} must be run as root" && exit 1
-
+# Run all tests
 for d in $*; do
     excmd unvme-setup bind $d
     excmd unvme/unvme_info $d
@@ -43,3 +42,4 @@ done
 if [ $# -gt 1 ]; then
     excmd unvme/unvme_mcd_test $*
 fi
+

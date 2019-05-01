@@ -59,6 +59,9 @@ UNVMe requires the following hardware and software support:
 
                 The boot command line must set "intel_iommu=on" argument.
 
+                Note: The user may want edit /etc/default/grub and then regenerate
+                the boot configuration (e.g. grub2-mkconfig -o /boot/grub2/grub.cfg)
+
                 To verify the system correctly configured with VFIO support,
                 check that /sys/kernel/iommu_groups directory is not empty but
                 contains other subdirectories (i.e. group numbers).
@@ -229,8 +232,44 @@ As defined in unvme.h, the following functions are supported:
 
 
 
-Note that a user space filesystem, namely UNFS, has also been developed
-at Micron to work with the UNVMe driver.  Such available filesystem enables
-major applications like MongoDB to work with UNVMe driver.
+Examples
+========
+
+Examples provided under the test/unvme directory are briefly described below.
+
+    unvme_info.c         -  Simply invoke unvme_open() to get SSD info
+
+    unvme_get_features.c -  Use unvme_cmd() to send NVMe admin get features commands
+
+    unvme_get_log_page.c -  Use unvme_cmd() to send NVMe get log page command
+
+    unvme_rw_test.c      -  Write read a single logical block address
+
+    unvme_sim_test.c     -  Do synchronous write/read using all available I/O queues
+
+    unvme_api_test.c     -  Do asynchronous write/read test
+
+    unvme_wrc.c          -  Write/read to entire drive (single thread)
+
+    unvme_mts_test.c     -  Multi-threaded test
+
+    unvme_mcd_test.c     -  Concurrent multiple devices test
+
+    unvme_lat_test.c     -  Latency/performance test
+
+
+Note that the test/unvme-test script will sequentially run many of these tests.
+
+
+Additional package
+==================
+
+A prototype cacheless user space filesystem, namely UNFS, has also been
+developed at Micron to provide a more complete user space I/O stack.
+
+Most databases depend on filesystem, so such available filesystem is needed to
+enable database applications to work with the UNVMe driver.  A plugin for MongoDB
+is also provided along with UNFS for evaluating MongoDB on UNFS on UNVMe.
+
 See https://github.com/MicronSSD/unfs.git for details.
 

@@ -10,10 +10,10 @@
 #include "unvme.h"
 #include "config-host.h"
 #include "fio.h"
-#include "optgroup.h"       // since fio 2.4
+//#include "optgroup.h"     // required for fio 2.4+ but not needed for fio 3.x
 
 
-#define TDEBUG(fmt, arg...) //fprintf(stderr, "#%s.%d " fmt "\n", __func__, td->thread_number, ##arg)
+#define TDEBUG(fmt, arg...) //printf("#%s.%d " fmt "\n", __func__, td->thread_number, ##arg)
 #define FATAL(fmt, arg...)  do { warnx(fmt, ##arg); abort(); } while (0)
 
 
@@ -22,6 +22,7 @@ typedef struct {
     pthread_mutex_t     mutex;
     const unvme_ns_t*   ns;
     int                 ncpus;
+    int                 nlb;
 } unvme_context_t;
 
 /// Thread IO completion queue
@@ -56,11 +57,11 @@ static void do_unvme_init(struct thread_data *td)
         sscanf(td->o.filename, "%x.%x.%x.%x", &b, &d, &f, &n);
         sprintf(pciname, "%x:%x.%x/%x", b, d, f, n);
         unvme.ns = unvme_open(pciname);
-
         if (!unvme.ns)
             FATAL("unvme_open %s failed", pciname);
         if (td->o.iodepth >= unvme.ns->qsize)
             FATAL("iodepth %d greater than queue size", td->o.iodepth);
+        unvme.nlb = td->o.bs[DDIR_READ] >> unvme.ns->blockshift;
 
         unvme.ncpus = sysconf(_SC_NPROCESSORS_ONLN);
         printf("unvme_open %s q=%dx%d ncpus=%d\n",
@@ -204,12 +205,12 @@ static int fio_unvme_getevents(struct thread_data *td, unsigned int min,
  * io_u->xfer_buflen. Residual data count may be set in io_u->resid
  * for a short read/write.
  */
-static int fio_unvme_queue(struct thread_data *td, struct io_u *io_u)
+static enum fio_q_status fio_unvme_queue(struct thread_data *td, struct io_u *io_u)
 {
     int q = td->thread_number - 1;
     void* buf = io_u->buf;
     u64 slba = io_u->offset >> unvme.ns->blockshift;
-    int nlb = io_u->xfer_buflen >> unvme.ns->blockshift;
+    int nlb = unvme.nlb;
 
     switch (io_u->ddir) {
     case DDIR_READ:

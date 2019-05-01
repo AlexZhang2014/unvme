@@ -62,7 +62,7 @@ typedef struct {
 // Global variables
 static const unvme_ns_t* ns;    ///< unvme namespace pointer
 static int qcount = 1;          ///< queue count
-static int qsize = 8;           ///< queue size
+static int qdepth = 8;          ///< I/O queue depth (i.e. size-1)
 static int runtime = 15;        ///< run time in seconds
 static u64 endtsc;              ///< end run tsc
 static u64 timeout;             ///< tsc elapsed timeout
@@ -109,7 +109,6 @@ static void* run_thread(void* arg)
 {
     int rw = (long)arg >> 16;
     int q = (long)arg & 0xffff;
-    int qdepth = qsize - 1;
 
     u64 lba = (q * qcount * qdepth * ns->nbpp) << 1;
     lat_page_t* pages = calloc(ns->maxiopq, sizeof(lat_page_t));
@@ -178,19 +177,20 @@ void run_test(const char* name, int rw)
     sem_init(&sm_ready, 0, 0);
     sem_init(&sm_start, 0, 0);
 
-    u64 tsec = rdtsc_second();
     int q;
     for (q = 0; q < qcount; q++) {
         long arg = (rw << 16) + q;
         pthread_create(&ses[q], 0, run_thread, (void*)arg);
         sem_wait(&sm_ready);
     }
-
     sleep(1);
+
     time_t te = time(0);
     struct tm* t = localtime(&te);
     printf("%s: run test for %d seconds (%02d:%02d:%02d)\n",
            name, runtime, t->tm_hour, t->tm_min, t->tm_sec);
+
+    u64 tsec = rdtsc_second();
     endtsc = rdtsc() + (runtime * tsec);
     timeout = UNVME_TIMEOUT * tsec;
 
@@ -198,10 +198,11 @@ void run_test(const char* name, int rw)
     for (q = 0; q < qcount; q++) pthread_join(ses[q], 0);
 
     u64 utsc = tsec / 1000000;
-    printf("%s: slat=(%.2f-%.2f %.2f) lat=(%.2f-%.2f %.2f) usecs ioc=%lu\n",
+    printf("%s: slat=(%.2f-%.2f %.2f us) lat=(%.2f-%.2f %.2f us) ioc=%lu iops=%.2f\n",
             name, (double)min_slat/utsc, (double)max_slat/utsc,
             (double)avg_slat/ioc/utsc, (double)min_clat/utsc,
-            (double)max_clat/utsc, (double)avg_clat/ioc/utsc, ioc);
+            (double)max_clat/utsc, (double)avg_clat/ioc/utsc,
+            ioc, (double)ioc/runtime);
     /*
     printf("%s: slat=(%lu-%lu %lu) lat=(%lu-%lu %lu) tscs ioc=%lu\n",
             name, min_slat, max_slat, avg_slat/ioc,
@@ -237,7 +238,7 @@ int main(int argc, char* argv[])
             qcount = strtol(optarg, 0, 0);
             break;
         case 'd':
-            qsize = strtol(optarg, 0, 0);
+            qdepth = strtol(optarg, 0, 0);
             break;
         default:
             warnx(usage, prog);
@@ -253,15 +254,15 @@ int main(int argc, char* argv[])
     printf("LATENCY TEST BEGIN\n");
     time_t tstart = time(0);
     if (!(ns = unvme_open(pciname))) exit(1);
-    if (qcount <= 0 || qcount > ns->qcount) errx(1, "qcount limit %d", ns->qcount);
-    if (qsize <= 1 || qsize > ns->qsize) errx(1, "qsize limit %d", ns->qsize);
+    if (qcount <= 0 || qcount > ns->qcount) errx(1, "qcount %d limit %d", qcount, ns->qcount);
+    if (qdepth <= 0 || qdepth >= ns->qsize) errx(1, "qdepth %d limit %d", qdepth, ns->qsize - 1);
 
     last_lba = (ns->blockcount - ns->nbpp) & ~(u64)(ns->nbpp - 1);
     if (!qcount) qcount = ns->qcount;
-    if (!qsize) qsize = ns->qsize;
+    if (!qdepth) qdepth = ns->qsize - 1;
 
-    printf("%s qc=%d/%d qs=%d/%d bc=%#lx bs=%d mbio=%d\n",
-            ns->device, qcount, ns->qcount, qsize, ns->qsize,
+    printf("%s qc=%d/%d qd=%d/%d bc=%#lx bs=%d mbio=%d\n",
+            ns->device, qcount, ns->qcount, qdepth, ns->qsize - 1,
             ns->blockcount, ns->blocksize, ns->maxbpio);
 
     ses = calloc(qcount, sizeof(pthread_t));

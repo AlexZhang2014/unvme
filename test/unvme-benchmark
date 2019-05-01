@@ -32,10 +32,10 @@ iodepth=IODEPTH"
 
 : ${FIODIR=$(grep '^FIODIR' ../Makefile.def | sed 's/.*=\s*//')}
 : ${RW="randwrite randread"}
-: ${NUMJOBS="01 08 16"}
-: ${IODEPTH="01 08 16 32"}
-: ${RAMPTIME=60}
-: ${RUNTIME=120}
+: ${NUMJOBS="01 04 08 16"}
+: ${IODEPTH="01 04 08 16"}
+: ${RAMPTIME=30}
+: ${RUNTIME=60}
 : ${BLOCKSIZE=4096}
 : ${IOENGINE=""}
 
@@ -134,6 +134,7 @@ for rw in ${RW}; do
                 echo "### ${PROG} terminated on error ###"
                 exit 1
             fi
+            sleep 5
         done
     done
 done
